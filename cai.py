@@ -21,6 +21,7 @@ class Config(BaseProxyConfig):
         helper.copy("chat_id")
         helper.copy("allowed_users")
         helper.copy("trigger")
+        helper.copy("reply_is_trigger")
 
 
 class CAIBot(Plugin):
@@ -35,18 +36,12 @@ class CAIBot(Plugin):
         self.chat_id = self.config["chat_id"] or char_chat["chats"][0]["chat_id"]
         self.trigger: str = self.config["trigger"].strip().casefold()
         self.allowed_users = set(self.config["allowed_users"])
+        self.reply_is_trigger: bool = self.config["reply_is_trigger"]
 
     async def send_message_to_ai(self, text: str, /) -> str:
         """Sends a message to the AI, and returns the response."""
 
         async with self.cai_client.connect() as chat2:
-            print(
-                self.character_id,
-                self.chat_id,
-                text,
-                self.author,
-                sep="\n",
-            )
             data = await chat2.send_message(
                 self.character_id,
                 self.chat_id,
@@ -77,11 +72,22 @@ class CAIBot(Plugin):
         ):
             return False
 
-        if self.trigger == "{name}":
-            return self.client.mxid in event.content.body.casefold()
+        if (self.trigger == "{name}") and (
+            self.client.mxid in event.content.body.casefold()
+        ):
+            return True
 
         # Always returns True if the trigger is empty
-        return self.trigger in event.content.body.casefold()
+        if self.trigger in event.content.body.casefold():
+            return True
+
+        reply_to = event.content.get_reply_to()
+        if reply_to:
+            reply_to = await self.client.get_event(event.room_id, reply_to)
+        if self.reply_is_trigger and reply_to and reply_to.sender == self.client.mxid:
+            return True
+
+        return False
 
     @event.on(EventType.ROOM_MESSAGE)
     async def on_message(self, event: MessageEvent) -> None:

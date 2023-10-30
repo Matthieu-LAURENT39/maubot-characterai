@@ -20,3 +20,7 @@ allowed_users: []
 # Leave empty to reply to every message
 # Set to '{name}' to use the bot's mxid
 trigger: ""
+
+# If true, the bot will reply to messages that answer it
+# even without the trigger matching
+reply_is_trigger: true
