@@ -1,0 +1,22 @@
+# Your access token for character.AI
+# See https://github.com/kramcat/CharacterAI for more information
+token: "YOUR_TOKEN_HERE"
+
+# The character's id
+# It's the the value after the ?char= in the chat url
+character_id: "CHAR_ID_HERE"
+
+# The chat's id
+# It's the value after the &hist= in the chat url
+# Leave empty to use the character's last chat
+chat_id: "CHAT_ID_HERE"
+
+# Who is allowed to use the bot?
+# Leave empty to allow everyone
+# List of mxids
+allowed_users: []
+
+# The string (case-insensitive) that a message must contain fo the bot to reply.
+# Leave empty to reply to every message
+# Set to '{name}' to use the bot's mxid
+trigger: ""

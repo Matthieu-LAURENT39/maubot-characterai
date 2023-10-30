@@ -1,0 +1,11 @@
+maubot: 0.1.0
+id: com.github.Matthieu-LAURENT39.maubot-characterAI
+version: 0.0.1
+license: MIT
+modules:
+  - cai
+main_class: CAIBot
+dependencies: [characterai]
+config: true
+extra_files:
+  - base-config.yaml
