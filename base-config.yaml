@@ -24,3 +24,7 @@ trigger: ""
 # If true, the bot will reply to messages that answer it
 # even without the trigger matching
 reply_is_trigger: true
+
+# If true, the bot will use a reply to the triggering message
+# otherwise, it just sends a message to the room without replying
+reply_to_message: false

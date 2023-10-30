@@ -22,6 +22,7 @@ class Config(BaseProxyConfig):
         helper.copy("allowed_users")
         helper.copy("trigger")
         helper.copy("reply_is_trigger")
+        helper.copy("reply_to_message")
 
 
 class CAIBot(Plugin):
@@ -37,6 +38,7 @@ class CAIBot(Plugin):
         self.trigger: str = self.config["trigger"].strip().casefold()
         self.allowed_users = set(self.config["allowed_users"])
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
+        self.reply_to_message: bool = self.config["reply_to_message"]
 
     async def send_message_to_ai(self, text: str, /) -> str:
         """Sends a message to the AI, and returns the response."""
@@ -112,7 +114,7 @@ class CAIBot(Plugin):
                 formatted_body=markdown.render(ai_reply),
                 msgtype=MessageType.NOTICE,  # Looks distinct from normal messages
             )
-            await event.reply(content)
+            await event.respond(content, reply=self.reply_to_message)
 
         except Exception as e:
             self.log.exception(f"Error while handing message: {e}")
