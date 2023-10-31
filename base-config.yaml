@@ -41,4 +41,5 @@ group_mode: null
 # The template to use for messages when group_mode is active
 # {username} will be replaced with the username of the sender
 # {text} will be replaced with the original message
+# My suggestion is '{username}: {text}' or '*{username} says* {text}'
 group_mode_template: "{username}: {text}"
