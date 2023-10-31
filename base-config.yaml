@@ -28,3 +28,7 @@ reply_is_trigger: true
 # If true, the bot will use a reply to the triggering message
 # otherwise, it just sends a message to the room without replying
 reply_to_message: false
+
+# If true, the bot will always reply to messages in DMs
+# even if the message didn't trigger it
+always_reply_in_dm: true

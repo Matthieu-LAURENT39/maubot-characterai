@@ -39,6 +39,7 @@ class CAIBot(Plugin):
         self.allowed_users = set(self.config["allowed_users"])
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
         self.reply_to_message: bool = self.config["reply_to_message"]
+        self.always_reply_in_dm: bool = self.config["always_reply_in_dm"]
 
     async def send_message_to_ai(self, text: str, /) -> str:
         """Sends a message to the AI, and returns the response."""
@@ -51,6 +52,13 @@ class CAIBot(Plugin):
                 self.author,
             )
         return data["turn"]["candidates"][0]["raw_content"]
+
+    async def _is_room_dm(self, room_id: str) -> bool:
+        """
+        Returns True if the room is a DM, else False.
+        A room is considered a DM it has 2 members
+        """
+        return len(await self.client.get_joined_members(room_id)) == 2
 
     def is_user_allowed(self, user_id: UserID) -> bool:
         """True if the user is allowed to use the bot, else False."""
@@ -73,6 +81,9 @@ class CAIBot(Plugin):
             or not self.is_user_allowed(event.sender)  # Ignore non-whitelisted users
         ):
             return False
+
+        if self.always_reply_in_dm and await self._is_room_dm(event.room_id):
+            return True
 
         if (self.trigger == "{name}") and (
             self.client.mxid in event.content.body.casefold()
