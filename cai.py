@@ -23,6 +23,9 @@ class Config(BaseProxyConfig):
         helper.copy("trigger")
         helper.copy("reply_is_trigger")
         helper.copy("reply_to_message")
+        helper.copy("always_reply_in_dm")
+        helper.copy("group_mode")
+        helper.copy("group_mode_template")
 
 
 class CAIBot(Plugin):
