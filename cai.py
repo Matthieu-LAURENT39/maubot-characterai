@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Type
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 from maubot import Plugin, MessageEvent
