@@ -16,6 +16,23 @@ from mautrix.util.async_db import UpgradeTable, Connection
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
 from uuid import uuid4
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mautrix.client import Client
+
+
+@asynccontextmanager
+async def client_typing(
+    client: Client, event: MessageEvent, *, timeout: int = 60_000
+) -> None:
+    try:
+        await client.set_typing(event.room_id, timeout=timeout)
+        yield
+    finally:
+        await client.set_typing(event.room_id, timeout=0)
+
 
 upgrade_table = UpgradeTable()
 
@@ -180,8 +197,9 @@ class CAIBot(Plugin):
 
     @cai.subcommand(name="new_chat")
     async def new_chat(self, event: MessageEvent) -> None:
-        chat_id, ai_reply = await self.create_ai_chat()
-        await self._insert_room_chat(event.room_id, chat_id)
+        async with client_typing(self.client, event):
+            chat_id, ai_reply = await self.create_ai_chat()
+            await self._insert_room_chat(event.room_id, chat_id)
         await self._reply(event=event, body=ai_reply)
 
     @event.on(EventType.ROOM_MESSAGE)
@@ -194,23 +212,20 @@ class CAIBot(Plugin):
 
         try:
             # I really with you could use a context manager for this
-            await self.client.set_typing(event.room_id, timeout=60_000)
+            async with client_typing(self.client, event):
+                chat_id = await self._get_chat_by_room(event.room_id)
+                if chat_id is None:
+                    await event.respond(
+                        "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
+                    )
+                    return
 
-            chat_id = await self._get_chat_by_room(event.room_id)
-            if chat_id is None:
-                await event.respond(
-                    "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
+                ai_reply = await self.send_message_to_ai(
+                    await self._handle_group_mode(event, str(event.content.body)),
+                    chat_id,
                 )
-                return
-
-            ai_reply = await self.send_message_to_ai(
-                await self._handle_group_mode(event, str(event.content.body)),
-                chat_id,
-            )
 
             # Send the response back to the chat room
-            await self.client.set_typing(event.room_id, timeout=0)
-
             await self._reply(event=event, body=ai_reply)
 
         except Exception as e:
