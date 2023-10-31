@@ -84,7 +84,7 @@ class CAIBot(Plugin):
     async def _insert_room_chat(self, room_id: str, chat_id: str) -> None:
         async with self.database.acquire() as conn:
             await conn.execute(
-                "INSERT INTO rooms (matrix_room_id, cai_chat_id) VALUES (?, ?)",
+                "REPLACE INTO rooms (matrix_room_id, cai_chat_id) VALUES (?, ?)",
                 room_id,
                 chat_id,
             )
