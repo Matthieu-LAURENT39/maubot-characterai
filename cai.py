@@ -197,6 +197,9 @@ class CAIBot(Plugin):
 
     @cai.subcommand(name="new_chat")
     async def new_chat(self, event: MessageEvent) -> None:
+        if not self.is_user_allowed(event.sender):
+            return
+
         async with client_typing(self.client, event):
             chat_id, ai_reply = await self.create_ai_chat()
             await self._insert_room_chat(event.room_id, chat_id)
