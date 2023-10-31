@@ -1,25 +1,23 @@
 from __future__ import annotations
 
-from typing import Type
-from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
-from maubot import Plugin, MessageEvent
-from maubot.handlers import event
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Type
+from uuid import uuid4
+
 from characterai import PyAsyncCAI
+from maubot import MessageEvent, Plugin
+from maubot.handlers import command, event
 from mautrix.types import (
-    Format,
-    TextMessageEventContent,
     EventType,
-    UserID,
+    Format,
     MessageType,
     RelationType,
+    TextMessageEventContent,
+    UserID,
 )
 from mautrix.util import markdown
-from mautrix.util.async_db import UpgradeTable, Connection
-from maubot import Plugin, MessageEvent
-from maubot.handlers import command
-from uuid import uuid4
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from mautrix.util.async_db import Connection, UpgradeTable
+from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 
 if TYPE_CHECKING:
     from mautrix.client import Client
