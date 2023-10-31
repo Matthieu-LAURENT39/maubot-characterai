@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from asyncio import Lock
 from typing import TYPE_CHECKING, Type
 from uuid import uuid4
 
@@ -65,6 +66,8 @@ class CAIBot(Plugin):
     async def start(self) -> None:
         self.config.load_and_update()
 
+        self._lock = Lock()
+
         # Setup the CAI api
         self.cai_client = PyAsyncCAI(self.config["token"])
         self.character_id = self.config["character_id"]
@@ -75,7 +78,6 @@ class CAIBot(Plugin):
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
         self.reply_to_message: bool = self.config["reply_to_message"]
         self.always_reply_in_dm: bool = self.config["always_reply_in_dm"]
-
         self.group_mode: bool | None = self.config["group_mode"]
         self.group_mode_template: str = self.config["group_mode_template"]
 
@@ -107,27 +109,29 @@ class CAIBot(Plugin):
     async def send_message_to_ai(self, text: str, chat_id: str) -> str:
         """Sends a message to the AI, and returns the response."""
 
-        async with self.cai_client.connect() as chat2:
-            data = await chat2.send_message(
-                self.character_id,
-                chat_id,
-                text,
-                {"author_id": self.user_id},
-            )
-        return data["turn"]["candidates"][0]["raw_content"]
+        async with self._lock:
+            async with self.cai_client.connect() as chat2:
+                data = await chat2.send_message(
+                    self.character_id,
+                    chat_id,
+                    text,
+                    {"author_id": self.user_id},
+                )
+            return data["turn"]["candidates"][0]["raw_content"]
 
     async def create_ai_chat(self) -> tuple[str, str]:
         """Returns the chat_id and the first message from the AI."""
-        async with self.cai_client.connect() as chat2:
-            char_chat = await chat2.new_chat(
-                self.character_id,
-                str(uuid4()),  # Why is this client side???
-                self.user_id,
+        async with self._lock:
+            async with self.cai_client.connect() as chat2:
+                char_chat = await chat2.new_chat(
+                    self.character_id,
+                    str(uuid4()),  # Why is this client side???
+                    self.user_id,
+                )
+            return (
+                char_chat[0]["chat"]["chat_id"],
+                char_chat[1]["turn"]["candidates"][0]["raw_content"],
             )
-        return (
-            char_chat[0]["chat"]["chat_id"],
-            char_chat[1]["turn"]["candidates"][0]["raw_content"],
-        )
 
     async def _is_room_dm(self, room_id: str) -> bool:
         """
