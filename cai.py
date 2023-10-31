@@ -41,7 +41,20 @@ class CAIBot(Plugin):
         self.reply_to_message: bool = self.config["reply_to_message"]
         self.always_reply_in_dm: bool = self.config["always_reply_in_dm"]
 
-    async def send_message_to_ai(self, text: str, /) -> str:
+        self.group_mode: bool | None = self.config["group_mode"]
+        self.group_mode_template: str = self.config["group_mode_template"]
+
+    async def _handle_group_mode(self, event: MessageEvent, text: str) -> str:
+        if self.group_mode == True or (
+            self.group_mode is None and not await self._is_room_dm(event.room_id)
+        ):
+            text = self.group_mode_template.format(
+                username=self.client.parse_user_id(event.sender)[0],
+                text=text,
+            )
+        return text
+
+    async def send_message_to_ai(self, text: str) -> str:
         """Sends a message to the AI, and returns the response."""
 
         async with self.cai_client.connect() as chat2:
@@ -114,7 +127,9 @@ class CAIBot(Plugin):
             # I really with you could use a context manager for this
             await self.client.set_typing(event.room_id, timeout=60_000)
 
-            ai_reply = await self.send_message_to_ai(str(event.content.body))
+            ai_reply = await self.send_message_to_ai(
+                await self._handle_group_mode(event, str(event.content.body))
+            )
 
             # Send the response back to the chat room
             await self.client.set_typing(event.room_id, timeout=0)

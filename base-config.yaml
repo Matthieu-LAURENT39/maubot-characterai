@@ -8,7 +8,6 @@ character_id: "CHAR_ID_HERE"
 
 # The chat's id
 # It's the value after the &hist= in the chat url
-# Leave empty to use the character's last chat
 chat_id: "CHAT_ID_HERE"
 
 # Who is allowed to use the bot?
@@ -32,3 +31,14 @@ reply_to_message: false
 # If true, the bot will always reply to messages in DMs
 # even if the message didn't trigger it
 always_reply_in_dm: true
+
+# If true, the bot will prefix all messages with the name of the sender
+# when communicating with the AI, useful for group chats.
+# If false, it will never use the prefix.
+# If null, it will automatically choose based on if a room is a group chat
+group_mode: null
+
+# The template to use for messages when group_mode is active
+# {username} will be replaced with the username of the sender
+# {text} will be replaced with the original message
+group_mode_template: "{username}: {text}"
