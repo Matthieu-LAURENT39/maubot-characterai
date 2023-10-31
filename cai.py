@@ -169,7 +169,8 @@ class CAIBot(Plugin):
             return True
 
         if (self.trigger == "{name}") and (
-            self.client.mxid in event.content.body.casefold()
+            self.client.parse_user_id(self.client.mxid)[0]
+            in event.content.body.casefold()
         ):
             return True
 
