@@ -12,13 +12,29 @@ from mautrix.types import (
     RelationType,
 )
 from mautrix.util import markdown
+from mautrix.util.async_db import UpgradeTable, Connection
+from maubot import Plugin, MessageEvent
+from maubot.handlers import command
+from uuid import uuid4
+
+upgrade_table = UpgradeTable()
+
+
+@upgrade_table.register(description="Initial revision")
+async def upgrade_v1(conn: Connection) -> None:
+    await conn.execute(
+        """CREATE TABLE `rooms` (
+	    `matrix_room_id` TEXT NOT NULL,
+	    `cai_chat_id` TEXT NOT NULL,
+	    PRIMARY KEY (`matrix_room_id`)
+        )"""
+    )
 
 
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
         helper.copy("token")
         helper.copy("character_id")
-        helper.copy("chat_id")
         helper.copy("allowed_users")
         helper.copy("trigger")
         helper.copy("reply_is_trigger")
@@ -36,8 +52,7 @@ class CAIBot(Plugin):
         self.cai_client = PyAsyncCAI(self.config["token"])
         self.character_id = self.config["character_id"]
         char_chat = await self.cai_client.chat2.get_chat(self.character_id)
-        self.author = {"author_id": char_chat["chats"][0]["creator_id"]}
-        self.chat_id = self.config["chat_id"] or char_chat["chats"][0]["chat_id"]
+        self.user_id = char_chat["chats"][0]["creator_id"]
         self.trigger: str = self.config["trigger"].strip().casefold()
         self.allowed_users = set(self.config["allowed_users"])
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
@@ -46,6 +61,21 @@ class CAIBot(Plugin):
 
         self.group_mode: bool | None = self.config["group_mode"]
         self.group_mode_template: str = self.config["group_mode_template"]
+
+    async def _insert_room_chat(self, room_id: str, chat_id: str) -> None:
+        async with self.database.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO rooms (matrix_room_id, cai_chat_id) VALUES (?, ?)",
+                room_id,
+                chat_id,
+            )
+
+    async def _get_chat_by_room(self, room_id: str) -> str | None:
+        async with self.database.acquire() as conn:
+            result = await conn.fetchrow(
+                "SELECT cai_chat_id FROM rooms WHERE matrix_room_id = ?", room_id
+            )
+            return result["cai_chat_id"] if result is not None else None
 
     async def _handle_group_mode(self, event: MessageEvent, text: str) -> str:
         if self.group_mode == True or (
@@ -57,17 +87,30 @@ class CAIBot(Plugin):
             )
         return text
 
-    async def send_message_to_ai(self, text: str) -> str:
+    async def send_message_to_ai(self, text: str, chat_id: str) -> str:
         """Sends a message to the AI, and returns the response."""
 
         async with self.cai_client.connect() as chat2:
             data = await chat2.send_message(
                 self.character_id,
-                self.chat_id,
+                chat_id,
                 text,
-                self.author,
+                {"author_id": self.user_id},
             )
         return data["turn"]["candidates"][0]["raw_content"]
+
+    async def create_ai_chat(self) -> tuple[str, str]:
+        """Returns the chat_id and the first message from the AI."""
+        async with self.cai_client.connect() as chat2:
+            char_chat = await chat2.new_chat(
+                self.character_id,
+                str(uuid4()),  # Why is this client side???
+                self.user_id,
+            )
+        return (
+            char_chat[0]["chat"]["chat_id"],
+            char_chat[1]["turn"]["candidates"][0]["raw_content"],
+        )
 
     async def _is_room_dm(self, room_id: str) -> bool:
         """
@@ -95,6 +138,9 @@ class CAIBot(Plugin):
             or event.content["msgtype"]
             != MessageType.TEXT  # Ignore non-text messages (like images)
             or not self.is_user_allowed(event.sender)  # Ignore non-whitelisted users
+            or event.content.body.startswith(
+                "!"
+            )  # Ignore command (prefix is always ! it seems)
         ):
             return False
 
@@ -118,6 +164,26 @@ class CAIBot(Plugin):
 
         return False
 
+    async def _reply(self, *, event: MessageEvent, body: str):
+        content = TextMessageEventContent(
+            format=Format.HTML,
+            body=body,
+            formatted_body=markdown.render(body),
+            msgtype=MessageType.NOTICE,  # Looks distinct from normal messages
+        )
+        return await event.respond(content, reply=self.reply_to_message)
+
+    # Base command so we can create subcommands
+    @command.new(name="cai", require_subcommand=True)
+    async def cai(self, event: MessageEvent) -> None:
+        pass
+
+    @cai.subcommand(name="new_chat")
+    async def new_chat(self, event: MessageEvent) -> None:
+        chat_id, ai_reply = await self.create_ai_chat()
+        await self._insert_room_chat(event.room_id, chat_id)
+        await self._reply(event=event, body=ai_reply)
+
     @event.on(EventType.ROOM_MESSAGE)
     async def on_message(self, event: MessageEvent) -> None:
         # Mark message as read, so the user can see the bot is alive
@@ -130,20 +196,22 @@ class CAIBot(Plugin):
             # I really with you could use a context manager for this
             await self.client.set_typing(event.room_id, timeout=60_000)
 
+            chat_id = await self._get_chat_by_room(event.room_id)
+            if chat_id is None:
+                await event.respond(
+                    "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
+                )
+                return
+
             ai_reply = await self.send_message_to_ai(
-                await self._handle_group_mode(event, str(event.content.body))
+                await self._handle_group_mode(event, str(event.content.body)),
+                chat_id,
             )
 
             # Send the response back to the chat room
             await self.client.set_typing(event.room_id, timeout=0)
 
-            content = TextMessageEventContent(
-                format=Format.HTML,
-                body=ai_reply,
-                formatted_body=markdown.render(ai_reply),
-                msgtype=MessageType.NOTICE,  # Looks distinct from normal messages
-            )
-            await event.respond(content, reply=self.reply_to_message)
+            await self._reply(event=event, body=ai_reply)
 
         except Exception as e:
             self.log.exception(f"Error while handing message: {e}")
@@ -152,3 +220,7 @@ class CAIBot(Plugin):
     @classmethod
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
+
+    @classmethod
+    def get_db_upgrade_table(cls) -> UpgradeTable | None:
+        return upgrade_table
