@@ -1,5 +1,6 @@
 # Your access token for character.AI
 # See https://github.com/kramcat/CharacterAI for more information
+# Requires a full reload of the bot for changes to take effect
 token: "YOUR_TOKEN_HERE"
 
 # The character's id to use if no other one is specified at chat creation

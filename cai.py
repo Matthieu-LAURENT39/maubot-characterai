@@ -74,15 +74,8 @@ class CAIBot(Plugin):
 
         # Setup the CAI api
         self.cai_client = PyAsyncCAI(self.config["token"])
-        self.default_character_id: str = self.config["default_character_id"]
         user_info = await self.cai_client.user.info()
         self.user_id = str(user_info["user"]["user"]["id"])
-        self.allowed_users = set(self.config["allowed_users"])
-        self.reply_is_trigger: bool = self.config["reply_is_trigger"]
-        self.reply_to_message: bool = self.config["reply_to_message"]
-        self.always_reply_in_dm: bool = self.config["always_reply_in_dm"]
-        self.group_mode: bool | None = self.config["group_mode"]
-        self.group_mode_template: str = self.config["group_mode_template"]
 
     async def _insert_room_chat(
         self, *, room_id: str, character_id: str, chat_id: str
@@ -111,10 +104,11 @@ class CAIBot(Plugin):
 
     async def _handle_group_mode(self, event: MessageEvent, text: str) -> str:
         """Applies the group mode template if needed"""
-        if self.group_mode == True or (
-            self.group_mode is None and not await self._is_room_dm(event.room_id)
+        if self.config["group_mode"] == True or (
+            self.config["group_mode"] is None
+            and not await self._is_room_dm(event.room_id)
         ):
-            text = self.group_mode_template.format(
+            text = self.config["group_mode_template"].format(
                 username=self.client.parse_user_id(event.sender)[0],
                 text=text,
             )
@@ -160,11 +154,13 @@ class CAIBot(Plugin):
     def is_user_allowed(self, user_id: UserID) -> bool:
         """True if the user is allowed to use the bot, else False."""
 
+        allowed_users = set(self.config["allowed_users"])
+
         # If the whitelist is empty, allow everyone
-        if not self.allowed_users:
+        if not allowed_users:
             return True
 
-        return user_id in self.allowed_users
+        return user_id in allowed_users
 
     async def is_bot_triggered(self, event: MessageEvent) -> bool:
         """True if we should respond to this message, else False."""
@@ -182,7 +178,7 @@ class CAIBot(Plugin):
         ):
             return False
 
-        if self.always_reply_in_dm and await self._is_room_dm(event.room_id):
+        if self.config["always_reply_in_dm"] and await self._is_room_dm(event.room_id):
             return True
 
         # Always returns True if the trigger is empty
@@ -192,7 +188,11 @@ class CAIBot(Plugin):
         reply_to = event.content.get_reply_to()
         if reply_to:
             reply_to = await self.client.get_event(event.room_id, reply_to)
-        if self.reply_is_trigger and reply_to and reply_to.sender == self.client.mxid:
+        if (
+            self.config["reply_is_trigger"]
+            and reply_to
+            and reply_to.sender == self.client.mxid
+        ):
             return True
 
         return False
@@ -205,7 +205,7 @@ class CAIBot(Plugin):
             formatted_body=markdown.render(body),
             msgtype=MessageType.NOTICE,  # Looks distinct from normal messages
         )
-        return await event.respond(content, reply=self.reply_to_message)
+        return await event.respond(content, reply=self.config["reply_to_message"])
 
     # Base command so we can create subcommands
     @command.new(name="cai", require_subcommand=True)
@@ -220,8 +220,8 @@ class CAIBot(Plugin):
 
         # For some reason, missing arguments are empty strings instead of None
         if not character_id:
-            if self.default_character_id:
-                character_id = self.default_character_id
+            if self.config["default_character_id"]:
+                character_id = self.config["default_character_id"]
             else:
                 await event.respond(
                     "No character id was provided and no default character is set."
