@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 async def client_typing(
     client: Client, event: MessageEvent, *, timeout: int = 60_000
 ) -> None:
+    """Context manager to set typing status for the duration of the block."""
     try:
         await client.set_typing(event.room_id, timeout=timeout)
         yield
@@ -85,6 +86,7 @@ class CAIBot(Plugin):
     async def _insert_room_chat(
         self, *, room_id: str, character_id: str, chat_id: str
     ) -> None:
+        """Associates a room with a CAI chat in the database."""
         async with self.database.acquire() as conn:
             await conn.execute(
                 "REPLACE INTO rooms (matrix_room_id, cai_character_id, cai_chat_id) VALUES (?, ?, ?)",
@@ -107,6 +109,7 @@ class CAIBot(Plugin):
             )
 
     async def _handle_group_mode(self, event: MessageEvent, text: str) -> str:
+        """Applies the group mode template if needed"""
         if self.group_mode == True or (
             self.group_mode is None and not await self._is_room_dm(event.room_id)
         ):
@@ -200,6 +203,7 @@ class CAIBot(Plugin):
         return False
 
     async def _reply(self, *, event: MessageEvent, body: str):
+        """Helper function to reply to a MessageEvent"""
         content = TextMessageEventContent(
             format=Format.HTML,
             body=body,
