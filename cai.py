@@ -71,8 +71,8 @@ class CAIBot(Plugin):
         # Setup the CAI api
         self.cai_client = PyAsyncCAI(self.config["token"])
         self.character_id = self.config["character_id"]
-        char_chat = await self.cai_client.chat2.get_chat(self.character_id)
-        self.user_id = char_chat["chats"][0]["creator_id"]
+        user_info = await self.cai_client.user.info()
+        self.user_id = str(user_info["user"]["user"]["id"])
         self.trigger: str = self.config["trigger"].strip().casefold()
         self.allowed_users = set(self.config["allowed_users"])
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
