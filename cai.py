@@ -75,7 +75,6 @@ class CAIBot(Plugin):
         self.default_character_id: str = self.config["default_character_id"]
         user_info = await self.cai_client.user.info()
         self.user_id = str(user_info["user"]["user"]["id"])
-        self.trigger: str = self.config["trigger"].strip().casefold()
         self.allowed_users = set(self.config["allowed_users"])
         self.reply_is_trigger: bool = self.config["reply_is_trigger"]
         self.reply_to_message: bool = self.config["reply_to_message"]
@@ -184,12 +183,6 @@ class CAIBot(Plugin):
         if self.always_reply_in_dm and await self._is_room_dm(event.room_id):
             return True
 
-        if (self.trigger == "{name}") and (
-            self.client.parse_user_id(self.client.mxid)[0]
-            in event.content.body.casefold()
-        ):
-            return True
-
         # Always returns True if the trigger is empty
         if self.trigger in event.content.body.casefold():
             return True
@@ -258,8 +251,13 @@ class CAIBot(Plugin):
                     )
                     return
 
+                text = str(event.content.body)
+                if self.config["strip_trigger_prefix"]:
+                    text = text.lstrip().removeprefix(self.trigger).lstrip()
+                text = await self._handle_group_mode(event, text)
+
                 ai_reply = await self.send_message_to_ai(
-                    await self._handle_group_mode(event, str(event.content.body)),
+                    text,
                     character_id=character_id,
                     chat_id=chat_id,
                 )
@@ -270,6 +268,22 @@ class CAIBot(Plugin):
         except Exception as e:
             self.log.exception(f"Error while handing message: {e}")
             await event.respond(f"Error while handing message... {e}")
+
+    @property
+    def trigger(self) -> str:
+        """The trigger for the bot to respond to. Handles the {name} placeholder."""
+        t = self.config["trigger"]
+
+        # Ok so, for some reason, maubot calls EVERY properties at
+        # plugin registration time, which is before the config is loaded.
+        # So t will be None, and we need to handle that.
+        if t is None:
+            return ""
+
+        if t == "{name}":
+            t = self.client.parse_user_id(self.client.mxid)[0]
+
+        return t.strip().casefold()
 
     @classmethod
     def get_config_class(cls) -> Type[BaseProxyConfig]:

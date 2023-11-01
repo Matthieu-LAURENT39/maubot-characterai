@@ -17,17 +17,22 @@ allowed_users: []
 # Set to '{name}' to use the bot's mxid
 trigger: "{name}"
 
+# If true, the bot will strip the trigger from the message before sending it to the AI
+# It will only strip it if it's at the very start of the message, so you can still use a bot's
+# name in the middle of a sentence for example.
+strip_trigger_prefix: true
+
 # If true, the bot will reply to messages that answer it
 # even without the trigger matching
 reply_is_trigger: true
 
-# If true, the bot will use a reply to the triggering message
-# otherwise, it just sends a message to the room without replying
-reply_to_message: false
-
 # If true, the bot will always reply to messages in DMs
 # even if the message didn't trigger it
 always_reply_in_dm: true
+
+# If true, the bot will use a reply to the triggering message
+# otherwise, it just sends a message to the room without replying
+reply_to_message: false
 
 # If true, the bot will prefix all messages with the name of the sender
 # when communicating with the AI, useful for group chats.
