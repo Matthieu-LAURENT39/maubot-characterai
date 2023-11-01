@@ -43,6 +43,7 @@ async def upgrade_v1(conn: Connection) -> None:
     await conn.execute(
         """CREATE TABLE `rooms` (
 	    `matrix_room_id` TEXT NOT NULL,
+	    `cai_character_id` TEXT NOT NULL,
 	    `cai_chat_id` TEXT NOT NULL,
 	    PRIMARY KEY (`matrix_room_id`)
         )"""
@@ -52,7 +53,7 @@ async def upgrade_v1(conn: Connection) -> None:
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
         helper.copy("token")
-        helper.copy("character_id")
+        helper.copy("default_character_id")
         helper.copy("allowed_users")
         helper.copy("trigger")
         helper.copy("reply_is_trigger")
@@ -70,7 +71,7 @@ class CAIBot(Plugin):
 
         # Setup the CAI api
         self.cai_client = PyAsyncCAI(self.config["token"])
-        self.character_id = self.config["character_id"]
+        self.default_character_id: str = self.config["default_character_id"]
         user_info = await self.cai_client.user.info()
         self.user_id = str(user_info["user"]["user"]["id"])
         self.trigger: str = self.config["trigger"].strip().casefold()
@@ -81,20 +82,29 @@ class CAIBot(Plugin):
         self.group_mode: bool | None = self.config["group_mode"]
         self.group_mode_template: str = self.config["group_mode_template"]
 
-    async def _insert_room_chat(self, room_id: str, chat_id: str) -> None:
+    async def _insert_room_chat(
+        self, *, room_id: str, character_id: str, chat_id: str
+    ) -> None:
         async with self.database.acquire() as conn:
             await conn.execute(
-                "REPLACE INTO rooms (matrix_room_id, cai_chat_id) VALUES (?, ?)",
+                "REPLACE INTO rooms (matrix_room_id, cai_character_id, cai_chat_id) VALUES (?, ?, ?)",
                 room_id,
+                character_id,
                 chat_id,
             )
 
-    async def _get_chat_by_room(self, room_id: str) -> str | None:
+    async def _get_chat_by_room(self, room_id: str) -> tuple[str, str] | None:
+        """Gets the character_id and chat_id for a room, if it exists in the db."""
         async with self.database.acquire() as conn:
             result = await conn.fetchrow(
-                "SELECT cai_chat_id FROM rooms WHERE matrix_room_id = ?", room_id
+                "SELECT cai_chat_id, cai_character_id FROM rooms WHERE matrix_room_id = ?",
+                room_id,
             )
-            return result["cai_chat_id"] if result is not None else None
+            return (
+                (result["cai_character_id"], result["cai_chat_id"])
+                if result is not None
+                else None
+            )
 
     async def _handle_group_mode(self, event: MessageEvent, text: str) -> str:
         if self.group_mode == True or (
@@ -106,25 +116,28 @@ class CAIBot(Plugin):
             )
         return text
 
-    async def send_message_to_ai(self, text: str, chat_id: str) -> str:
+    async def send_message_to_ai(
+        self, text: str, *, character_id: str, chat_id: str
+    ) -> str:
         """Sends a message to the AI, and returns the response."""
 
         async with self._lock:
             async with self.cai_client.connect() as chat2:
                 data = await chat2.send_message(
-                    self.character_id,
+                    character_id,
                     chat_id,
                     text,
                     {"author_id": self.user_id},
                 )
             return data["turn"]["candidates"][0]["raw_content"]
 
-    async def create_ai_chat(self) -> tuple[str, str]:
+    async def create_ai_chat(self, character_id: str) -> tuple[str, str]:
         """Returns the chat_id and the first message from the AI."""
+        print("Creating new chat", {"c": character_id, "u": self.user_id})
         async with self._lock:
             async with self.cai_client.connect() as chat2:
                 char_chat = await chat2.new_chat(
-                    self.character_id,
+                    character_id,
                     str(uuid4()),  # Why is this client side???
                     self.user_id,
                 )
@@ -201,13 +214,26 @@ class CAIBot(Plugin):
         pass
 
     @cai.subcommand(name="new_chat")
-    async def new_chat(self, event: MessageEvent) -> None:
+    @command.argument("character_id", required=False)
+    async def new_chat(self, event: MessageEvent, character_id: str) -> None:
         if not self.is_user_allowed(event.sender):
             return
 
+        # For some reason, missing arguments are empty strings instead of None
+        if not character_id:
+            if self.default_character_id:
+                character_id = self.default_character_id
+            else:
+                await event.respond(
+                    "No character id was provided and no default character is set."
+                )
+                return
+
         async with client_typing(self.client, event):
-            chat_id, ai_reply = await self.create_ai_chat()
-            await self._insert_room_chat(event.room_id, chat_id)
+            chat_id, ai_reply = await self.create_ai_chat(character_id)
+            await self._insert_room_chat(
+                room_id=event.room_id, character_id=character_id, chat_id=chat_id
+            )
         await self._reply(event=event, body=ai_reply)
 
     @event.on(EventType.ROOM_MESSAGE)
@@ -221,7 +247,7 @@ class CAIBot(Plugin):
         try:
             # I really with you could use a context manager for this
             async with client_typing(self.client, event):
-                chat_id = await self._get_chat_by_room(event.room_id)
+                character_id, chat_id = await self._get_chat_by_room(event.room_id)
                 if chat_id is None:
                     await event.respond(
                         "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
@@ -230,7 +256,8 @@ class CAIBot(Plugin):
 
                 ai_reply = await self.send_message_to_ai(
                     await self._handle_group_mode(event, str(event.content.body)),
-                    chat_id,
+                    character_id=character_id,
+                    chat_id=chat_id,
                 )
 
             # Send the response back to the chat room

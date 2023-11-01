@@ -2,9 +2,10 @@
 # See https://github.com/kramcat/CharacterAI for more information
 token: "YOUR_TOKEN_HERE"
 
-# The character's id
+# The character's id to use if no other one is specified at chat creation
+# You can leave it empty, in which case it will raise an error if no character is specified
 # It's the the value after the ?char= in the chat url
-character_id: "CHAR_ID_HERE"
+default_character_id: ""
 
 # Who is allowed to use the bot?
 # Leave empty to allow everyone
