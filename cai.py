@@ -247,12 +247,13 @@ class CAIBot(Plugin):
         try:
             # I really with you could use a context manager for this
             async with client_typing(self.client, event):
-                character_id, chat_id = await self._get_chat_by_room(event.room_id)
-                if chat_id is None:
+                query = await self._get_chat_by_room(event.room_id)
+                if query is None:
                     await event.respond(
                         "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
                     )
                     return
+                character_id, chat_id = query
 
                 text = str(event.content.body)
                 if self.config["strip_trigger_prefix"]:
