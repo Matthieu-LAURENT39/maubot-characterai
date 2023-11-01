@@ -1,4 +1,4 @@
-# maubot-characterAI
+# maubot-characterai
 
 A [maubot](https://github.com/maubot/maubot) plugin to interact with [character.ai](https://character.ai).
 
