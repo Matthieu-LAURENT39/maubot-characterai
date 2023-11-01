@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from asyncio import Lock
 from typing import TYPE_CHECKING, Type
 from uuid import uuid4
+from textwrap import indent
 
 from characterai import PyAsyncCAI
 from maubot import MessageEvent, Plugin
@@ -62,6 +63,7 @@ class Config(BaseProxyConfig):
         helper.copy("always_reply_in_dm")
         helper.copy("group_mode")
         helper.copy("group_mode_template")
+        helper.copy("show_prompt_in_reply")
 
 
 class CAIBot(Plugin):
@@ -261,6 +263,13 @@ class CAIBot(Plugin):
                     character_id=character_id,
                     chat_id=chat_id,
                 )
+
+                if (self.config["show_prompt_in_reply"] == True) or (
+                    self.config["show_prompt_in_reply"] is None
+                    and not await self._is_room_dm(event.room_id)
+                ):
+                    prompt = indent(text, "> ", predicate=lambda _: True)
+                    ai_reply = f"{prompt}\n\n{ai_reply}"
 
             # Send the response back to the chat room
             await self._reply(event=event, body=ai_reply)

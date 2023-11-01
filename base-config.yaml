@@ -34,6 +34,11 @@ always_reply_in_dm: true
 # otherwise, it just sends a message to the room without replying
 reply_to_message: false
 
+# If true, the bot will show the prompt used alongside the AI's reply
+# If none, it will only show the prompt when in a group chat
+# The prompt will be in a quoteblock
+show_prompt_in_reply: null
+
 # If true, the bot will prefix all messages with the name of the sender
 # when communicating with the AI, useful for group chats.
 # If false, it will never use the prefix.
