@@ -58,12 +58,13 @@ class Config(BaseProxyConfig):
         helper.copy("default_character_id")
         helper.copy("allowed_users")
         helper.copy("trigger")
+        helper.copy("strip_trigger_prefix")
         helper.copy("reply_is_trigger")
-        helper.copy("reply_to_message")
         helper.copy("always_reply_in_dm")
+        helper.copy("reply_to_message")
+        helper.copy("show_prompt_in_reply")
         helper.copy("group_mode")
         helper.copy("group_mode_template")
-        helper.copy("show_prompt_in_reply")
 
 
 class CAIBot(Plugin):
