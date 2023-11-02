@@ -213,7 +213,7 @@ class CAIBot(Plugin):
     async def cai(self, event: MessageEvent) -> None:
         pass
 
-    @cai.subcommand(name="new_chat")
+    @cai.subcommand(name="new_chat", aliases=['new'])
     @command.argument("character_id", required=False)
     async def new_chat(self, event: MessageEvent, character_id: str) -> None:
         if not self.is_user_allowed(event.sender):
