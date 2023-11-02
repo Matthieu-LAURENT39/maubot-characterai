@@ -213,7 +213,7 @@ class CAIBot(Plugin):
     async def cai(self, event: MessageEvent) -> None:
         pass
 
-    @cai.subcommand(name="new_chat", aliases=['new'])
+    @cai.subcommand(name="new_chat", aliases=["new"])
     @command.argument("character_id", required=False)
     async def new_chat(self, event: MessageEvent, character_id: str) -> None:
         if not self.is_user_allowed(event.sender):
@@ -257,7 +257,9 @@ class CAIBot(Plugin):
 
                 text = str(event.content.body)
                 if self.config["strip_trigger_prefix"]:
-                    text = text.lstrip().removeprefix(self.trigger).lstrip()
+                    text = text.lstrip()
+                    if text.casefold().startswith(self.trigger):
+                        text = text[len(self.trigger) :]
                 text = await self._handle_group_mode(event, text)
 
                 ai_reply = await self.send_message_to_ai(
@@ -282,7 +284,7 @@ class CAIBot(Plugin):
 
     @property
     def trigger(self) -> str:
-        """The trigger for the bot to respond to. Handles the {name} placeholder."""
+        """The casefolded trigger for the bot to respond to. Handles the {name} placeholder."""
         t = self.config["trigger"]
 
         # Ok so, for some reason, maubot calls EVERY properties at
