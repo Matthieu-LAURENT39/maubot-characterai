@@ -26,7 +26,7 @@ from mautrix.util.async_db import Connection, UpgradeTable
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 
 from . import utils
-from .caimessage import CAIMessage, ExportFile, history_to_txt
+from .caimessage import CAIMessage, ExportFile, history_to_json, history_to_txt
 
 if TYPE_CHECKING:
     from mautrix.client import Client
@@ -78,6 +78,7 @@ class Config(BaseProxyConfig):
         helper.copy("group_mode")
         helper.copy("group_mode_template")
         helper.copy("export_txt")
+        helper.copy("export_json")
 
 
 class CAIBot(Plugin):
@@ -298,8 +299,16 @@ class CAIBot(Plugin):
                 character_id=character_id,
                 chat_id=chat_id,
             )
-
             files.append(text_file)
+
+        if self.config["export_json"]:
+            json_file = history_to_json(
+                history,
+                character_name=character_name,
+                character_id=character_id,
+                chat_id=chat_id,
+            )
+            files.append(json_file)
 
         # No output format were enabled, just do nothing
         if not files:

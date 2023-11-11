@@ -65,3 +65,4 @@ group_mode_template: "{username}: {text}"
 # These options all have the same effect, but with different output format
 # If multiple output formats are enabled, they will all be sent in one zip file
 export_txt: false
+export_json: false

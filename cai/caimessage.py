@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO, StringIO
@@ -24,6 +25,14 @@ class CAIMessage:
             # TODO: Actually check the create time, to be more sure
             content=data["candidates"][0]["raw_content"],
         )
+
+    def export_to_dict(self) -> dict:
+        return {
+            "create_time": utils.pretty_utc_str(self.create_time),
+            "author_name": self.author_name,
+            "author_is_human": self.author_is_human,
+            "content": self.content,
+        }
 
 
 @dataclass
@@ -61,4 +70,26 @@ def history_to_txt(
 
     return ExportFile(
         file_extension="txt", mimetype="text/plain", data=f.read().encode()
+    )
+
+
+def history_to_json(
+    history: list[CAIMessage], *, character_name: str, character_id: str, chat_id: str
+) -> ExportFile:
+    """
+    Converts a list of CAIMessages to a json file-like object.
+    """
+
+    data = {}
+    data["character_name"] = character_name
+    data["character_id"] = character_id
+    data["chat_id"] = chat_id
+    data["start_time"] = utils.pretty_utc_str(history[0].create_time)
+    data["end_time"] = utils.pretty_utc_str(history[-1].create_time)
+    data["messages"] = [msg.export_to_dict() for msg in history]
+
+    json_data = json.dumps(data, indent=4)
+
+    return ExportFile(
+        file_extension="json", mimetype="application/json", data=json_data.encode()
     )
