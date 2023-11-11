@@ -40,6 +40,15 @@ reply_to_message: false
 # The prompt will be in a blockquote
 show_prompt_in_reply: null
 
+# If true, the bot will use the character.ai char's name as
+# its display name ONLY for the current room.
+# If false, it will use it's global display name.
+use_char_name: true
+# Same as above, but for the avatar.
+# The avatar will be redownloaded and uploaded every time you
+# start a new chat, so it can end up using some space.
+use_char_avatar: false
+
 # If true, the bot will prefix all messages with the name of the sender
 # when communicating with the AI, useful for group chats.
 # If false, it will never use the prefix.

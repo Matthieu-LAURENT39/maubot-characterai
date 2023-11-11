@@ -20,9 +20,13 @@ from mautrix.types import (
 from mautrix.util import markdown
 from mautrix.util.async_db import Connection, UpgradeTable
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
+from urllib.parse import urljoin
 
 if TYPE_CHECKING:
     from mautrix.client import Client
+
+
+BASE_AVATAR_URL = "https://characterai.io/i/400/static/avatars/"
 
 
 @asynccontextmanager
@@ -63,6 +67,8 @@ class Config(BaseProxyConfig):
         helper.copy("always_reply_in_dm")
         helper.copy("reply_to_message")
         helper.copy("show_prompt_in_reply")
+        helper.copy("use_char_name")
+        helper.copy("use_char_avatar")
         helper.copy("group_mode")
         helper.copy("group_mode_template")
 
@@ -144,6 +150,39 @@ class CAIBot(Plugin):
                 char_chat[0]["chat"]["chat_id"],
                 char_chat[1]["turn"]["candidates"][0]["raw_content"],
             )
+
+    async def set_display_to_char_info(
+        self, room_id: str, character_id: str, *, copy_name: bool, copy_avatar: bool
+    ) -> None:
+        """Sets the bot's nickname and room pfp to the CAI character's"""
+        # Avoid useless requests
+        if not copy_name and not copy_avatar:
+            return
+
+        # Get the character's info
+        info = await self.cai_client.character.info(character_id)
+
+        content = {"membership": "join"}
+        if copy_name:
+            content["displayname"] = info["character"]["name"]
+        if copy_avatar:
+            # download the avatar
+            avatar_url = urljoin(BASE_AVATAR_URL, info["character"]["avatar_file_name"])
+            async with self.http.get(avatar_url) as resp:
+                resp.raise_for_status()
+                avatar_content = await resp.read()
+                avarat_mimetype = resp.content_type
+            avatar_mxc = await self.client.upload_media(
+                avatar_content, mime_type=avarat_mimetype
+            )
+            content["avatar_url"] = avatar_mxc
+
+        await self.client.send_state_event(
+            room_id=room_id,
+            event_type="m.room.member",
+            content=content,
+            state_key=self.client.mxid,
+        )
 
     async def _is_room_dm(self, room_id: str) -> bool:
         """
@@ -234,6 +273,14 @@ class CAIBot(Plugin):
             await self._insert_room_chat(
                 room_id=event.room_id, character_id=character_id, chat_id=chat_id
             )
+
+        await self.set_display_to_char_info(
+            room_id=event.room_id,
+            character_id=character_id,
+            copy_name=self.config["use_char_name"],
+            copy_avatar=self.config["use_char_avatar"],
+        )
+
         await self._reply(event=event, body=ai_reply)
 
     @event.on(EventType.ROOM_MESSAGE)
