@@ -154,20 +154,31 @@ class CAIBot(Plugin):
     async def set_display_to_char_info(
         self, room_id: str, character_id: str, *, copy_name: bool, copy_avatar: bool
     ) -> None:
-        """Sets the bot's nickname and room pfp to the CAI character's"""
+        """
+        Sets the bot's nickname and room pfp to the CAI character's
+        Only call this AFTER a chat has been created with that character
+        """
         # Avoid useless requests
         if not copy_name and not copy_avatar:
             return
 
         # Get the character's info
-        info = await self.cai_client.character.info(character_id)
+        # We can't use character.info, as it doesn't work for private characters
+        # info = await self.cai_client.character.info(character_id)
+
+        # We use the chat info instead, but it requires a chat to exist already
+        async with self._lock:
+            async with self.cai_client.connect() as chat2:
+                chats_info = await chat2.get_chat(character_id)
+        info = chats_info["chats"][0]
 
         content = {"membership": "join"}
+        print(info)
         if copy_name:
-            content["displayname"] = info["character"]["name"]
+            content["displayname"] = info["character_name"]
         if copy_avatar:
             # download the avatar
-            avatar_url = urljoin(BASE_AVATAR_URL, info["character"]["avatar_file_name"])
+            avatar_url = urljoin(BASE_AVATAR_URL, info["character_avatar_uri"])
             async with self.http.get(avatar_url) as resp:
                 resp.raise_for_status()
                 avatar_content = await resp.read()
