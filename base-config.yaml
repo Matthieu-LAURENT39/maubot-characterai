@@ -60,3 +60,8 @@ group_mode: null
 # {text} will be replaced with the original message
 # My suggestion is '{username}: {text}' or '*{username} says* {text}'
 group_mode_template: "{username}: {text}"
+
+# When a new chat is created, exports the previous chat's messages
+# These options all have the same effect, but with different output format
+# If multiple output formats are enabled, they will all be sent in one zip file
+export_txt: false

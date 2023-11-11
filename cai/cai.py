@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import zipfile
 from asyncio import Lock
-from typing import TYPE_CHECKING, Type
-from uuid import uuid4
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from io import BytesIO
 from textwrap import indent
+from typing import TYPE_CHECKING, Type
+from urllib.parse import urljoin
+from uuid import uuid4
 
 from characterai import PyAsyncCAI
 from maubot import MessageEvent, Plugin
@@ -20,7 +24,9 @@ from mautrix.types import (
 from mautrix.util import markdown
 from mautrix.util.async_db import Connection, UpgradeTable
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
-from urllib.parse import urljoin
+
+from . import utils
+from .caimessage import CAIMessage, ExportFile, history_to_txt
 
 if TYPE_CHECKING:
     from mautrix.client import Client
@@ -71,6 +77,7 @@ class Config(BaseProxyConfig):
         helper.copy("use_char_avatar")
         helper.copy("group_mode")
         helper.copy("group_mode_template")
+        helper.copy("export_txt")
 
 
 class CAIBot(Plugin):
@@ -151,16 +158,18 @@ class CAIBot(Plugin):
                 char_chat[1]["turn"]["candidates"][0]["raw_content"],
             )
 
-    async def set_display_to_char_info(
-        self, room_id: str, character_id: str, *, copy_name: bool, copy_avatar: bool
-    ) -> None:
-        """
-        Sets the bot's nickname and room pfp to the CAI character's
-        Only call this AFTER a chat has been created with that character
-        """
-        # Avoid useless requests
-        if not copy_name and not copy_avatar:
-            return
+    async def get_chat_history(self, chat_id: str) -> list[CAIMessage]:
+        """Returns all messages in a chat, from oldest to newest."""
+        async with self._lock:
+            async with self.cai_client.connect() as chat2:
+                data = await chat2.get_history(chat_id)
+            return sorted(
+                [CAIMessage.from_dict(msg) for msg in data["turns"]],
+                key=lambda m: m.create_time,
+            )
+
+    async def get_char_info(self, character_id: str) -> tuple[str, str]:
+        """Returns a tuple with the character's name and avatar url."""
 
         # Get the character's info
         # We can't use character.info, as it doesn't work for private characters
@@ -172,13 +181,27 @@ class CAIBot(Plugin):
                 chats_info = await chat2.get_chat(character_id)
         info = chats_info["chats"][0]
 
+        return (info["character_name"], info["character_avatar_uri"])
+
+    async def set_display_to_char_info(
+        self, room_id: str, character_id: str, *, copy_name: bool, copy_avatar: bool
+    ) -> None:
+        """
+        Sets the bot's nickname and room pfp to the CAI character's
+        Only call this AFTER a chat has been created with that character
+        """
+        # Avoid useless requests
+        if not copy_name and not copy_avatar:
+            return
+
+        character_name, character_avatar_uri = await self.get_char_info(character_id)
+
         content = {"membership": "join"}
-        print(info)
         if copy_name:
-            content["displayname"] = info["character_name"]
+            content["displayname"] = character_name
         if copy_avatar:
             # download the avatar
-            avatar_url = urljoin(BASE_AVATAR_URL, info["character_avatar_uri"])
+            avatar_url = urljoin(BASE_AVATAR_URL, character_avatar_uri)
             async with self.http.get(avatar_url) as resp:
                 resp.raise_for_status()
                 avatar_content = await resp.read()
@@ -258,6 +281,56 @@ class CAIBot(Plugin):
         )
         return await event.respond(content, reply=self.config["reply_to_message"])
 
+    async def _handle_exports(self, room_id: str):
+        character_id, chat_id = await self._get_chat_by_room(room_id)
+        history = await self.get_chat_history(chat_id)
+        character_name, _ = await self.get_char_info(character_id)
+        safe_character_name = "".join(
+            c for c in character_name.replace(" ", "_") if c.isalnum() or c == "_"
+        )
+        export_time_str = utils.pretty_utc_str(datetime.now(tz=timezone.utc))
+
+        files: list[ExportFile] = []
+        if self.config["export_txt"]:
+            text_file = history_to_txt(
+                history,
+                character_name=character_name,
+                character_id=character_id,
+                chat_id=chat_id,
+            )
+
+            files.append(text_file)
+
+        # No output format were enabled, just do nothing
+        if not files:
+            return
+
+        # More than one file, zip them together
+        if 1 < len(files):
+            zip_file = BytesIO()
+            with zipfile.ZipFile(zip_file, mode="w") as zf:
+                for file in files:
+                    zf.writestr(
+                        f"cai-{safe_character_name}-{export_time_str}.{file.file_extension}",
+                        file.data,
+                    )
+            zip_file.seek(0)
+            file = ExportFile(".zip", "application/zip", zip_file.read())
+        # Only one file, just send it directly
+        else:
+            file = files[0]
+
+        # Upload and send the file
+        file_url = await self.client.upload_media(
+            data=file.data,
+            mime_type=file.mimetype,
+        )
+        await self.client.send_file(
+            room_id,
+            file_url,
+            file_name=f"cai-{safe_character_name}-{export_time_str}.{file.file_extension}",
+        )
+
     # Base command so we can create subcommands
     @command.new(name="cai", require_subcommand=True)
     async def cai(self, event: MessageEvent) -> None:
@@ -280,17 +353,21 @@ class CAIBot(Plugin):
                 return
 
         async with client_typing(self.client, event):
+            # If a chat already exists
+            if await self._get_chat_by_room(event.room_id) is not None:
+                await self._handle_exports(room_id=event.room_id)
+
             chat_id, ai_reply = await self.create_ai_chat(character_id)
             await self._insert_room_chat(
                 room_id=event.room_id, character_id=character_id, chat_id=chat_id
             )
 
-        await self.set_display_to_char_info(
-            room_id=event.room_id,
-            character_id=character_id,
-            copy_name=self.config["use_char_name"],
-            copy_avatar=self.config["use_char_avatar"],
-        )
+            await self.set_display_to_char_info(
+                room_id=event.room_id,
+                character_id=character_id,
+                copy_name=self.config["use_char_name"],
+                copy_avatar=self.config["use_char_avatar"],
+            )
 
         await self._reply(event=event, body=ai_reply)
 
