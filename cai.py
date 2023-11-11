@@ -283,6 +283,36 @@ class CAIBot(Plugin):
 
         await self._reply(event=event, body=ai_reply)
 
+    @cai.subcommand(name="sync_info")
+    async def sync_info(self, event: MessageEvent) -> None:
+        if not self.is_user_allowed(event.sender):
+            return
+
+        if not self.config["use_char_name"] or self.config["use_char_avatar"]:
+            await self._reply(
+                event=event,
+                body="Both `use_char_name` and `use_char_avatar` are disabled, nothing to do.",
+            )
+            return
+
+        # TODO: this is duplicated code, should be factored out
+        query = await self._get_chat_by_room(event.room_id)
+        if query is None:
+            await event.respond(
+                "This room doesn't have an AI chat yet. Create one with `!cai new_chat`"
+            )
+            return
+        character_id, _ = query
+
+        await self.set_display_to_char_info(
+            room_id=event.room_id,
+            character_id=character_id,
+            copy_name=self.config["use_char_name"],
+            copy_avatar=self.config["use_char_avatar"],
+        )
+
+        await event.react("✅")
+
     @event.on(EventType.ROOM_MESSAGE)
     async def on_message(self, event: MessageEvent) -> None:
         # Mark message as read, so the user can see the bot is alive
