@@ -299,7 +299,7 @@ class CAIBot(Plugin):
         if not self.is_user_allowed(event.sender):
             return
 
-        if not self.config["use_char_name"] or self.config["use_char_avatar"]:
+        if not self.config["use_char_name"] and not self.config["use_char_avatar"]:
             await self._reply(
                 event=event,
                 body="Both `use_char_name` and `use_char_avatar` are disabled, nothing to do.",
