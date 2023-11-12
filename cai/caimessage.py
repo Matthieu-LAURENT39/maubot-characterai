@@ -16,14 +16,19 @@ class CAIMessage:
 
     @classmethod
     def from_dict(cls, data: dict):
+        # First candidate in the list is the latest
+        # TODO: Use primary_candidate_id to determine the correct candidate
+        #! In some rare cases, character.ai can stop generation so
+        #! early that the message won't even have a raw_content.
+        #! In that case, we set the content to an empty string.
+        content = data["candidates"][0].get("raw_content", "")
+
         return cls(
             create_time=datetime.fromisoformat(data["create_time"]),
             author_name=data["author"]["name"],
             # Key is absent for bots
             author_is_human=data["author"].get("is_human", False),
-            # First candidate in the list is the latest
-            # TODO: Actually check the create time, to be more sure
-            content=data["candidates"][0]["raw_content"],
+            content=content,
         )
 
     def export_to_dict(self) -> dict:
