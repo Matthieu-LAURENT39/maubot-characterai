@@ -283,6 +283,10 @@ class CAIBot(Plugin):
         return await event.respond(content, reply=self.config["reply_to_message"])
 
     async def _handle_exports(self, room_id: str):
+        if not (self.config["export_txt"] or self.config["export_json"]):
+            # TODO: Add logging that we skipped the export
+            return
+
         character_id, chat_id = await self._get_chat_by_room(room_id)
         history = await self.get_chat_history(chat_id)
         character_name, _ = await self.get_char_info(character_id)
